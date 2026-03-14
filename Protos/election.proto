@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+option csharp_namespace = "ElectionNode";
+
+package election;
+
+service ElectionService {
+
+  rpc SendElection (ElectionRequest) returns (ElectionResponse);
+
+  rpc AnnounceLeader (LeaderRequest) returns (LeaderResponse);
+  
+  rpc Ping (PingRequest) returns (PingResponse);
+  
+  rpc SendOk (OkRequest) returns (OkResponse);
+
+  rpc GetLeader (LeaderQuery) returns (LeaderReply);
+}
+
+message LeaderQuery {}
+
+message LeaderReply {
+  int32 leaderId = 1;
+}
+
+message ElectionRequest {
+  int32 nodeId = 1;
+}
+
+message ElectionResponse {
+  bool received = 1;
+}
+
+message LeaderRequest {
+  int32 leaderId = 1;
+}
+
+message LeaderResponse {
+  bool ack = 1;
+}
+
+message PingRequest {}
+
+message PingResponse {
+  bool ok = 1;
+}
+
+message OkRequest {
+  int32 nodeId = 1;
+}
+
+message OkResponse {
+  bool ack = 1;
+}
