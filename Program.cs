@@ -30,7 +30,6 @@ var app = builder.Build();
 
 app.UseHttpsRedirection();
 
-// Registra serviço gRPC
 app.MapGrpcService<ElectionServiceImpl>();
 
 app.Lifetime.ApplicationStarted.Register(() =>
@@ -41,10 +40,10 @@ app.Lifetime.ApplicationStarted.Register(() =>
     _ = Task.Run(service.MonitorLeader);
 });
 
-app.MapGet("/start", async (BullyElectionService service) =>
+app.MapGet("/iniciar", async (BullyElectionService service) =>
 {
     await service.StartElection();
-    return "Election started";
+    return "Eleição iniciada";
 });
 
 app.Run();
