@@ -1,0 +1,33 @@
+services:
+  route-gen-db:
+    image: postgres:17
+    container_name: route-gen-db
+    environment:
+      POSTGRES_DB: route_gen_db
+      POSTGRES_USER: route_user
+      POSTGRES_PASSWORD: route_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - route-gen-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "route_user", "-d", "route_gen_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  route-generator:
+    build: .
+    container_name: route-generator
+    ports:
+      - "5001:5001"
+    environment:
+      ConnectionStrings__DefaultConnection: Host=route-gen-db;Port=5432;Database=route_gen_db;Username=route_user;Password=route_pass
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5001
+    depends_on:
+      route-gen-db:
+        condition: service_healthy
+
+volumes:
+  route-gen-db-data:
