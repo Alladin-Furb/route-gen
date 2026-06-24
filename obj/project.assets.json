@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "targets": {
     "net10.0": {
       "Google.Protobuf/3.34.0": {
@@ -387,19 +387,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\320298076\\.nuget\\packages\\": {}
+    "/home/runner/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\320298076\\furb\\people-transportation\\ElectionNode\\ElectionNode.csproj",
+      "projectUniqueName": "/home/runner/work/route-gen/route-gen/ElectionNode.csproj",
       "projectName": "ElectionNode",
-      "projectPath": "C:\\Users\\320298076\\furb\\people-transportation\\ElectionNode\\ElectionNode.csproj",
-      "packagesPath": "C:\\Users\\320298076\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\320298076\\furb\\people-transportation\\ElectionNode\\obj\\",
+      "projectPath": "/home/runner/work/route-gen/route-gen/ElectionNode.csproj",
+      "packagesPath": "/home/runner/.nuget/packages/",
+      "outputPath": "/home/runner/work/route-gen/route-gen/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\320298076\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "/home/runner/.nuget/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net10.0"
@@ -409,6 +409,7 @@
       },
       "frameworks": {
         "net10.0": {
+          "framework": "net10.0",
           "targetAlias": "net10.0",
           "projectReferences": {}
         }
@@ -423,10 +424,11 @@
         "auditLevel": "low",
         "auditMode": "all"
       },
-      "SdkAnalysisLevel": "10.0.100"
+      "SdkAnalysisLevel": "10.0.300"
     },
     "frameworks": {
       "net10.0": {
+        "framework": "net10.0",
         "targetAlias": "net10.0",
         "dependencies": {
           "Google.Protobuf": {
@@ -463,7 +465,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.103/PortableRuntimeIdentifierGraph.json",
+        "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/10.0.301/PortableRuntimeIdentifierGraph.json",
         "packagesToPrune": {
           "Microsoft.AspNetCore": "(,10.0.32767]",
           "Microsoft.AspNetCore.Antiforgery": "(,10.0.32767]",

@@ -1,0 +1,2 @@
+obj/Release/net10.0/Protos/Election.cs \
+obj/Release/net10.0/Protos/ElectionGrpc.cs: Protos/election.proto
