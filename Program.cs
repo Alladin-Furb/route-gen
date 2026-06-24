@@ -1,49 +1,64 @@
-using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.EntityFrameworkCore;
+using RouteGen.Configuration;
+using RouteGen.Data;
+using RouteGen.Hubs;
+using RouteGen.Integration;
+using RouteGen.Notifications;
+using RouteGen.Realtime;
+using RouteGen.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-int port = 5001;
+// ─── Configuração ────────────────────────────────────────────────────────────
+builder.Services.Configure<RoutingOptions>(
+    builder.Configuration.GetSection(RoutingOptions.SectionName));
+builder.Services.Configure<ServicesOptions>(
+    builder.Configuration.GetSection(ServicesOptions.SectionName));
 
-if (args.Length > 0)
+// ─── Banco (PostgreSQL: Cloud SQL em produção, route-gen-db local) ───────────
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<RouteDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// ─── Tempo real (SignalR), com backplane Redis opcional para múltiplas réplicas
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
+var signalR = builder.Services.AddSignalR();
+if (!string.IsNullOrWhiteSpace(redisConnection))
 {
-    int.TryParse(args[0], out port);
+    signalR.AddStackExchangeRedis(redisConnection);
 }
 
-builder.Configuration["NodeId"] = (port - 5000).ToString();
+// ─── Serviços de domínio ─────────────────────────────────────────────────────
+builder.Services.AddScoped<ClusteringService>();
+builder.Services.AddScoped<RouteOptimizationService>();
+builder.Services.AddScoped<RouteGenerationService>();
+builder.Services.AddSingleton<NotificationService>();
+builder.Services.AddSingleton<IRouteNotifier, RouteNotifier>();
 
-Console.WriteLine($"Rodando na porta {port}");
-Console.WriteLine($"NodeId = {port - 5000}");
+// ─── Propagação assíncrona de presença ao attendance ─────────────────────────
+builder.Services.AddSingleton<PresencaPropagacaoQueue>();
+builder.Services.AddHostedService<PresencaPropagacaoWorker>();
 
+// ─── Clientes HTTP dos serviços vizinhos ─────────────────────────────────────
+builder.Services.AddHttpClient<RegisterClient>();
+builder.Services.AddHttpClient<AttendanceClient>();
+
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddGrpc();
-builder.WebHost.ConfigureKestrel(options =>
-{
-    options.ListenLocalhost(port, o =>
-    {
-        o.UseHttps();
-    });
-});
-
-builder.Services.AddSingleton<BullyElectionService>();
 
 var app = builder.Build();
 
-app.UseHttpsRedirection();
-
-app.MapGrpcService<ElectionServiceImpl>();
-
-app.Lifetime.ApplicationStarted.Register(() =>
+// ─── Migrações idempotentes no startup ───────────────────────────────────────
+using (var scope = app.Services.CreateScope())
 {
-    var service = app.Services.GetRequiredService<BullyElectionService>();
+    var db = scope.ServiceProvider.GetRequiredService<RouteDbContext>();
+    db.Database.Migrate();
+}
 
-    _ = Task.Run(service.DiscoverLeader);
-    _ = Task.Run(service.MonitorLeader);
-});
+app.MapControllers();
+app.MapHub<RouteHub>("/api/rotas/hub");
 
-app.MapGet("/iniciar", async (BullyElectionService service) =>
-{
-    await service.StartElection();
-    return "Eleição iniciada";
-});
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/api/rotas/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
