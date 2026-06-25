@@ -12,16 +12,16 @@ namespace RouteGen.Hubs;
 /// </summary>
 public class RouteHub : Hub
 {
-    public static string RotaGroup(int rotaId) => $"rota-{rotaId}";
+    public static string RotaGroup(Guid rotaId) => $"rota-{rotaId}";
 
-    public static string AlunoGroup(long alunoId) => $"aluno-{alunoId}";
+    public static string AlunoGroup(Guid alunoId) => $"aluno-{alunoId}";
 
     private GatewayUser CurrentUser =>
         GatewayUser.FromHeaders(Context.GetHttpContext()?.Request.Headers
             ?? new HeaderDictionary());
 
     /// <summary>Motorista/admin assina os eventos de uma rota.</summary>
-    public async Task SubscreverRota(int rotaId)
+    public async Task SubscreverRota(Guid rotaId)
     {
         var user = CurrentUser;
         if (!(user.IsMotorista || user.IsAdmin))
@@ -31,7 +31,7 @@ public class RouteHub : Hub
     }
 
     /// <summary>Aluno assina os eventos da própria parada/posição da van.</summary>
-    public async Task SubscreverAluno(int rotaId)
+    public async Task SubscreverAluno(Guid rotaId)
     {
         var user = CurrentUser;
         if (user.ProfileId is null)

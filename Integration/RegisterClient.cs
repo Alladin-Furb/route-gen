@@ -43,7 +43,7 @@ public class RegisterClient
         }
     }
 
-    public async Task<VehicleDto?> ObterVeiculoAsync(long veiculoId, CancellationToken ct = default)
+    public async Task<VehicleDto?> ObterVeiculoAsync(Guid veiculoId, CancellationToken ct = default)
     {
         if (!IsConfigured)
             return null;
@@ -59,12 +59,29 @@ public class RegisterClient
         }
     }
 
+    public async Task<List<VehicleDto>> ListarVeiculosAsync(CancellationToken ct = default)
+    {
+        if (!IsConfigured)
+            return new();
+
+        try
+        {
+            var veiculos = await _http.GetFromJsonAsync<List<VehicleDto>>("/veiculos", ct);
+            return veiculos ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Falha ao listar veículos do serviço de cadastro");
+            return new();
+        }
+    }
+
     public record AlunoDto(
-        long Id,
+        Guid Id,
         string? Matricula,
         string? Nome,
         string? RotaTransporte,
-        long? CursoId);
+        Guid? CursoId);
 
-    public record VehicleDto(long Id, string? Placa, string? Modelo, int Capacidade);
+    public record VehicleDto(Guid Id, string? Placa, string? Modelo, int Capacidade);
 }

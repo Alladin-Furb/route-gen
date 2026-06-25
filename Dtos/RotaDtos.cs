@@ -2,7 +2,7 @@ namespace RouteGen.Dtos;
 
 /// <summary>Cadastro/atualização do ponto de embarque de um aluno.</summary>
 public record PontoEmbarqueRequest(
-    long AlunoId,
+    Guid AlunoId,
     string? Matricula,
     string? Nome,
     double Latitude,
@@ -11,9 +11,23 @@ public record PontoEmbarqueRequest(
 
 /// <summary>Pedido de geração de rota para um veículo.</summary>
 public record GerarRotaRequest(
-    long VeiculoId,
+    Guid VeiculoId,
     string? RotaTransporte,
-    long? CursoId,
+    Guid? CursoId,
+    double OrigemLatitude,
+    double OrigemLongitude,
+    double DestinoLatitude,
+    double DestinoLongitude,
+    string? DestinoNome);
+
+/// <summary>
+/// Pedido de geração de MÚLTIPLAS rotas para uma viagem (curso): a frota é
+/// alocada automaticamente, dividindo os alunos confirmados por capacidade do
+/// veículo e proximidade geográfica.
+/// </summary>
+public record GerarRotaViagemRequest(
+    Guid CursoId,
+    DateOnly? Data,
     double OrigemLatitude,
     double OrigemLongitude,
     double DestinoLatitude,
@@ -24,8 +38,8 @@ public record GerarRotaRequest(
 public record PosicaoRequest(double Latitude, double Longitude);
 
 public record ParadaResponse(
-    int Id,
-    long AlunoId,
+    Guid Id,
+    Guid AlunoId,
     string Matricula,
     string Nome,
     int Ordem,
@@ -36,10 +50,10 @@ public record ParadaResponse(
     DateTime? ConfirmadaEm);
 
 public record RotaResponse(
-    int Id,
-    long VeiculoId,
+    Guid Id,
+    Guid VeiculoId,
     string? RotaTransporte,
-    long? CursoId,
+    Guid? CursoId,
     DateOnly Data,
     double DistanciaTotalMetros,
     string Status,
