@@ -35,8 +35,7 @@ builder.Services.AddScoped<RouteGenerationService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<IRouteNotifier, RouteNotifier>();
 
-// ─── Propagação assíncrona de presença ao attendance ─────────────────────────
-builder.Services.AddSingleton<PresencaPropagacaoQueue>();
+// ─── Propagação assíncrona de presença ao attendance (outbox durável) ────────
 builder.Services.AddHostedService<PresencaPropagacaoWorker>();
 
 // ─── Clientes HTTP dos serviços vizinhos ─────────────────────────────────────
@@ -52,7 +51,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<RouteDbContext>();
-    db.Database.Migrate();
+    db.Database.EnsureCreated();
 }
 
 app.MapControllers();

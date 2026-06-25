@@ -23,7 +23,7 @@ public sealed class GatewayUser
 
     public string? Role { get; init; }
 
-    public long? ProfileId { get; init; }
+    public Guid? ProfileId { get; init; }
 
     public bool IsAdmin => Role == Roles.Admin;
 
@@ -33,8 +33,8 @@ public sealed class GatewayUser
 
     public static GatewayUser FromHeaders(IHeaderDictionary headers)
     {
-        long? profileId = null;
-        if (long.TryParse(headers[ProfileIdHeader].FirstOrDefault(), out var pid))
+        Guid? profileId = null;
+        if (Guid.TryParse(headers[ProfileIdHeader].FirstOrDefault(), out var pid))
             profileId = pid;
 
         return new GatewayUser

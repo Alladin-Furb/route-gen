@@ -6,13 +6,13 @@ namespace RouteGen.Data.Entities;
 /// </summary>
 public class ParadaRota
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
-    public int RotaId { get; set; }
+    public Guid RotaId { get; set; }
 
     public Rota? Rota { get; set; }
 
-    public long AlunoId { get; set; }
+    public Guid AlunoId { get; set; }
 
     public string Matricula { get; set; } = "";
 

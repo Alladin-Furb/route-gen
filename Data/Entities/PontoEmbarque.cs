@@ -6,10 +6,10 @@ namespace RouteGen.Data.Entities;
 /// </summary>
 public class PontoEmbarque
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     /// <summary>Id do aluno no serviço de cadastro (register).</summary>
-    public long AlunoId { get; set; }
+    public Guid AlunoId { get; set; }
 
     public string Matricula { get; set; } = "";
 

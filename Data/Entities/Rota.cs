@@ -13,14 +13,14 @@ public enum StatusRota
 /// </summary>
 public class Rota
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
-    public long VeiculoId { get; set; }
+    public Guid VeiculoId { get; set; }
 
     /// <summary>Agrupador de transporte vindo do cadastro (Aluno.rotaTransporte).</summary>
     public string? RotaTransporte { get; set; }
 
-    public long? CursoId { get; set; }
+    public Guid? CursoId { get; set; }
 
     public DateOnly Data { get; set; }
 

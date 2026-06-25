@@ -5,7 +5,7 @@ namespace RouteGen.Domain;
 /// </summary>
 public class Student
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; }
 
     public string Matricula { get; set; } = "";
 

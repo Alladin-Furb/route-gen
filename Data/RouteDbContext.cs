@@ -15,6 +15,8 @@ public class RouteDbContext : DbContext
 
     public DbSet<ParadaRota> ParadasRota => Set<ParadaRota>();
 
+    public DbSet<PresencaOutbox> PresencaOutbox => Set<PresencaOutbox>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -50,6 +52,16 @@ public class RouteDbContext : DbContext
             e.Property(p => p.Nome).HasMaxLength(255);
             // Índice para confirmação rápida e idempotente por (rota, aluno).
             e.HasIndex(p => new { p.RotaId, p.AlunoId }).IsUnique();
+        });
+
+        modelBuilder.Entity<PresencaOutbox>(e =>
+        {
+            e.ToTable("presenca_outbox");
+            e.HasKey(o => o.Id);
+            e.Property(o => o.Role).HasMaxLength(50);
+            e.Property(o => o.UltimoErro).HasMaxLength(1000);
+            // Índice usado pelo worker para varrer pendências vencidas.
+            e.HasIndex(o => new { o.Status, o.ProximaTentativaEm });
         });
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using RouteGen.Configuration;
+using System.Net.Http.Json;
 
 namespace RouteGen.Integration;
 
@@ -7,10 +8,10 @@ namespace RouteGen.Integration;
 /// Mensagem de propagação de presença para o serviço de attendance.
 /// </summary>
 public record PresencaPropagacao(
-    long AlunoId,
-    long CursoId,
+    Guid AlunoId,
+    Guid CursoId,
     string Role,
-    long ProfileId);
+    Guid ProfileId);
 
 /// <summary>
 /// Cliente HTTP para o serviço de presença (attendance). Usado fora do caminho
@@ -61,4 +62,54 @@ public class AttendanceClient
 
         return true;
     }
+
+    /// <summary>
+    /// Lê os alunos que confirmaram a viagem em uma data:
+    /// GET /api/v1/presencas/confirmados?data=yyyy-MM-dd[&amp;cursoId=...]
+    /// É a fonte de "quem viaja hoje" usada para montar a rota.
+    /// </summary>
+    public async Task<List<ConfirmadoDto>> ListarConfirmadosAsync(
+        DateOnly data, Guid? cursoId, string? role, Guid? profileId, CancellationToken ct = default)
+    {
+        if (!IsConfigured)
+            return new();
+
+        var url = $"/api/v1/presencas/confirmados?data={data:yyyy-MM-dd}";
+        if (cursoId is not null)
+            url += $"&cursoId={cursoId}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("X-User-Role", string.IsNullOrWhiteSpace(role) ? "ROLE_ADMIN" : role);
+        if (profileId is not null)
+            request.Headers.Add("X-Profile-Id", profileId.Value.ToString());
+
+        try
+        {
+            var response = await _http.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Attendance respondeu {Status} ao listar confirmados de {Data}",
+                    (int)response.StatusCode, data);
+                return new();
+            }
+
+            var confirmados = await response.Content
+                .ReadFromJsonAsync<List<ConfirmadoDto>>(cancellationToken: ct);
+            return confirmados ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Falha ao listar confirmados do attendance para {Data}", data);
+            return new();
+        }
+    }
+
+    /// <summary>Confirmação de viagem (presença) retornada pelo attendance.</summary>
+    public record ConfirmadoDto(
+        Guid AlunoId,
+        string? AlunoMatricula,
+        string? AlunoNome,
+        Guid? CursoId,
+        string? Status);
 }

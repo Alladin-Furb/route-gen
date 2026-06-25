@@ -21,7 +21,6 @@ public class RotasController : ControllerBase
     private readonly RouteDbContext _db;
     private readonly RouteGenerationService _generation;
     private readonly IRouteNotifier _notifier;
-    private readonly PresencaPropagacaoQueue _propagacao;
     private readonly NotificationService _notification;
     private readonly RoutingOptions _options;
     private readonly ILogger<RotasController> _logger;
@@ -30,7 +29,6 @@ public class RotasController : ControllerBase
         RouteDbContext db,
         RouteGenerationService generation,
         IRouteNotifier notifier,
-        PresencaPropagacaoQueue propagacao,
         NotificationService notification,
         IOptions<RoutingOptions> options,
         ILogger<RotasController> logger)
@@ -38,7 +36,6 @@ public class RotasController : ControllerBase
         _db = db;
         _generation = generation;
         _notifier = notifier;
-        _propagacao = propagacao;
         _notification = notification;
         _options = options.Value;
         _logger = logger;
@@ -88,8 +85,8 @@ public class RotasController : ControllerBase
         });
     }
 
-    [HttpGet("ponto-embarque/{alunoId:long}")]
-    public async Task<ActionResult<object>> ObterPontoEmbarque(long alunoId, CancellationToken ct)
+    [HttpGet("ponto-embarque/{alunoId:guid}")]
+    public async Task<ActionResult<object>> ObterPontoEmbarque(Guid alunoId, CancellationToken ct)
     {
         var user = CurrentUser;
         if (user.IsAluno && user.ProfileId != alunoId)
@@ -126,7 +123,7 @@ public class RotasController : ControllerBase
 
         try
         {
-            var rota = await _generation.GerarRotaAsync(request, ct);
+            var rota = await _generation.GerarRotaAsync(request, user.Role, user.ProfileId, ct);
             var response = RotaMapper.ToResponse(rota);
 
             // Renderização imediata para quem estiver acompanhando.
@@ -142,8 +139,8 @@ public class RotasController : ControllerBase
         }
     }
 
-    [HttpGet("{id:int}")]
-    public async Task<ActionResult<RotaResponse>> ObterRota(int id, CancellationToken ct)
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<RotaResponse>> ObterRota(Guid id, CancellationToken ct)
     {
         var rota = await _db.Rotas
             .Include(r => r.Paradas)
@@ -169,7 +166,7 @@ public class RotasController : ControllerBase
     /// <summary>Rota corrente (mais recente do dia) de um veículo do motorista.</summary>
     [HttpGet("motorista/atual")]
     public async Task<ActionResult<RotaResponse>> RotaAtualDoMotorista(
-        [FromQuery] long veiculoId, CancellationToken ct)
+        [FromQuery] Guid veiculoId, CancellationToken ct)
     {
         var user = CurrentUser;
         if (!(user.IsAdmin || user.IsMotorista))
@@ -190,12 +187,108 @@ public class RotasController : ControllerBase
         return Ok(RotaMapper.ToResponse(rota));
     }
 
+    /// <summary>
+    /// Rota gerada para uma viagem (curso) em uma data — usada para mostrar ao
+    /// aluno os detalhes da viagem (veículo, paradas) quando já existe rota.
+    /// </summary>
+    [HttpGet("viagem/{cursoId:guid}")]
+    public async Task<ActionResult<RotaResponse>> RotaPorViagem(
+        Guid cursoId, [FromQuery] DateOnly? data, CancellationToken ct)
+    {
+        var dia = data ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var rota = await _db.Rotas
+            .Include(r => r.Paradas)
+            .AsNoTracking()
+            .Where(r => r.CursoId == cursoId && r.Data == dia)
+            .OrderByDescending(r => r.CriadoEm)
+            .FirstOrDefaultAsync(ct);
+
+        if (rota is null)
+            return NotFound();
+
+        return Ok(RotaMapper.ToResponse(rota));
+    }
+
+    /// <summary>
+    /// Gera múltiplas rotas para uma viagem, alocando a frota cadastrada por
+    /// capacidade do veículo e proximidade geográfica dos alunos confirmados.
+    /// </summary>
+    [HttpPost("gerar-viagem")]
+    public async Task<ActionResult<IReadOnlyList<RotaResponse>>> GerarRotasViagem(
+        [FromBody] GerarRotaViagemRequest request, CancellationToken ct)
+    {
+        var user = CurrentUser;
+        if (!(user.IsAdmin || user.IsMotorista))
+            return Forbidden();
+
+        try
+        {
+            var rotas = await _generation.GerarRotasPorViagemAsync(request, user.Role, user.ProfileId, ct);
+            var responses = rotas.Select(RotaMapper.ToResponse).ToList();
+
+            foreach (var response in responses)
+                await _notifier.RotaAtualizadaAsync(response);
+
+            await _notification.NotifyDriver(
+                $"{responses.Count} rota(s) gerada(s) para a viagem {request.CursoId}.");
+
+            return Ok(responses);
+        }
+        catch (RouteGenerationException ex)
+        {
+            return UnprocessableEntity(new { mensagem = ex.Message });
+        }
+    }
+
+    /// <summary>Lista todas as rotas geradas para uma viagem em uma data.</summary>
+    [HttpGet("viagem/{cursoId:guid}/rotas")]
+    public async Task<ActionResult<IReadOnlyList<RotaResponse>>> RotasPorViagem(
+        Guid cursoId, [FromQuery] DateOnly? data, CancellationToken ct)
+    {
+        var dia = data ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var rotas = await _db.Rotas
+            .Include(r => r.Paradas)
+            .AsNoTracking()
+            .Where(r => r.CursoId == cursoId && r.Data == dia)
+            .OrderBy(r => r.CriadoEm)
+            .ToListAsync(ct);
+
+        return Ok(rotas.Select(RotaMapper.ToResponse).ToList());
+    }
+
+    /// <summary>Rota em que o aluno autenticado foi alocado para uma viagem/data.</summary>
+    [HttpGet("viagem/{cursoId:guid}/minha")]
+    public async Task<ActionResult<RotaResponse>> MinhaRotaNaViagem(
+        Guid cursoId, [FromQuery] DateOnly? data, CancellationToken ct)
+    {
+        var user = CurrentUser;
+        if (user.ProfileId is null)
+            return Forbidden();
+
+        var dia = data ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var rota = await _db.Rotas
+            .Include(r => r.Paradas)
+            .AsNoTracking()
+            .Where(r => r.CursoId == cursoId && r.Data == dia && r.Paradas.Any(p => p.AlunoId == user.ProfileId))
+            .OrderByDescending(r => r.CriadoEm)
+            .FirstOrDefaultAsync(ct);
+
+        if (rota is null)
+            return NotFound();
+
+        rota.Paradas = rota.Paradas.Where(p => p.AlunoId == user.ProfileId).ToList();
+        return Ok(RotaMapper.ToResponse(rota));
+    }
+
     // ─── Telemetria e confirmação ─────────────────────────────────────────
 
     /// <summary>Motorista publica a posição atual da van (telemetria em tempo real).</summary>
-    [HttpPost("{rotaId:int}/posicao")]
+    [HttpPost("{rotaId:guid}/posicao")]
     public async Task<IActionResult> PublicarPosicao(
-        int rotaId, [FromBody] PosicaoRequest posicao, CancellationToken ct)
+        Guid rotaId, [FromBody] PosicaoRequest posicao, CancellationToken ct)
     {
         var user = CurrentUser;
         if (!(user.IsAdmin || user.IsMotorista))
@@ -213,9 +306,9 @@ public class RotasController : ControllerBase
     /// grava, emite o evento de tempo real na hora e propaga a presença ao
     /// attendance de forma assíncrona (fora do caminho crítico).
     /// </summary>
-    [HttpPost("{rotaId:int}/paradas/{alunoId:long}/confirmar")]
+    [HttpPost("{rotaId:guid}/paradas/{alunoId:guid}/confirmar")]
     public async Task<ActionResult<ConfirmacaoResponse>> ConfirmarEmbarque(
-        int rotaId, long alunoId, [FromBody] PosicaoRequest posicao, CancellationToken ct)
+        Guid rotaId, Guid alunoId, [FromBody] PosicaoRequest posicao, CancellationToken ct)
     {
         var user = CurrentUser;
         if (user.IsAluno && user.ProfileId != alunoId)
@@ -252,22 +345,27 @@ public class RotasController : ControllerBase
         {
             parada.Confirmada = true;
             parada.ConfirmadaEm = DateTime.UtcNow;
+
+            // Outbox durável: a intenção de propagar a presença é gravada na
+            // MESMA transação da confirmação (atomicidade). Um worker entrega ao
+            // attendance com retentativa/backoff, fora do caminho crítico.
+            if (rota.CursoId is Guid cursoId)
+            {
+                _db.PresencaOutbox.Add(new Data.Entities.PresencaOutbox
+                {
+                    AlunoId = alunoId,
+                    CursoId = cursoId,
+                    Role = user.Role ?? Roles.Aluno,
+                    ProfileId = user.ProfileId ?? alunoId
+                });
+            }
+
             await _db.SaveChangesAsync(ct);
 
             var paradaDto = RotaMapper.ToResponse(parada);
 
             // Evento de tempo real imediato para motorista e aluno.
             await _notifier.EmbarqueConfirmadoAsync(rotaId, alunoId, paradaDto);
-
-            // Propagação assíncrona ao attendance (não bloqueia a resposta).
-            if (rota.CursoId is long cursoId)
-            {
-                await _propagacao.EnqueueAsync(new PresencaPropagacao(
-                    alunoId,
-                    cursoId,
-                    user.Role ?? Roles.Aluno,
-                    user.ProfileId ?? alunoId), ct);
-            }
         }
 
         return Ok(new ConfirmacaoResponse(
