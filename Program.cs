@@ -47,10 +47,20 @@ builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
-// ─── Migrações idempotentes no startup ───────────────────────────────────────
+// ─── Schema idempotente: detecta schema Long-based (pré-UUID) e recria ────────
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<RouteDbContext>();
+    var conn = db.Database.GetDbConnection();
+    conn.Open();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'presenca_outbox')";
+    var schemaUpToDate = (bool)(cmd.ExecuteScalar() ?? false);
+    conn.Close();
+    if (!schemaUpToDate)
+    {
+        db.Database.EnsureDeleted();
+    }
     db.Database.EnsureCreated();
 }
 
