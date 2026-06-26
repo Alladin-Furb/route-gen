@@ -47,28 +47,102 @@ builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
-// ─── Schema idempotente: detecta schema Long-based (pré-UUID) e recria tabelas ─
+// ─── Schema: cria tabelas via SQL idempotente (EnsureCreated não funciona
+//     quando o banco postgres já existe no Cloud SQL) ────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<RouteDbContext>();
     var conn = db.Database.GetDbConnection();
     conn.Open();
+
+    // Remove tabelas com schema Long-based (pré-UUID) se ainda existirem
     using var checkCmd = conn.CreateCommand();
     checkCmd.CommandText = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'presenca_outbox')";
-    var schemaUpToDate = (bool)(checkCmd.ExecuteScalar() ?? false);
-    if (!schemaUpToDate)
+    var schemaOk = (bool)(checkCmd.ExecuteScalar() ?? false);
+    if (!schemaOk)
     {
         using var dropCmd = conn.CreateCommand();
         dropCmd.CommandText = @"
             DROP TABLE IF EXISTS paradas_rota CASCADE;
             DROP TABLE IF EXISTS pontos_embarque CASCADE;
             DROP TABLE IF EXISTS rotas CASCADE;
-            DROP TABLE IF EXISTS presenca_outbox CASCADE;
+            DROP TABLE IF EXISTS ""__EFMigrationsHistory"" CASCADE;
         ";
         dropCmd.ExecuteNonQuery();
     }
+
+    using var createCmd = conn.CreateCommand();
+    createCmd.CommandText = @"
+        CREATE TABLE IF NOT EXISTS pontos_embarque (
+            ""Id""           uuid                        NOT NULL,
+            ""AlunoId""      uuid                        NOT NULL,
+            ""Matricula""    character varying(50)       NOT NULL,
+            ""Nome""         character varying(255)      NOT NULL,
+            ""Latitude""     double precision            NOT NULL,
+            ""Longitude""    double precision            NOT NULL,
+            ""Endereco""     character varying(255),
+            ""AtualizadoEm"" timestamp with time zone   NOT NULL,
+            CONSTRAINT ""PK_pontos_embarque"" PRIMARY KEY (""Id"")
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_pontos_embarque_AlunoId""
+            ON pontos_embarque (""AlunoId"");
+
+        CREATE TABLE IF NOT EXISTS rotas (
+            ""Id""                   uuid                        NOT NULL,
+            ""VeiculoId""            uuid                        NOT NULL,
+            ""RotaTransporte""       character varying(100),
+            ""CursoId""              uuid,
+            ""Data""                 date                        NOT NULL,
+            ""DistanciaTotalMetros"" double precision            NOT NULL,
+            ""Status""               integer                     NOT NULL,
+            ""DestinoLatitude""      double precision            NOT NULL,
+            ""DestinoLongitude""     double precision            NOT NULL,
+            ""DestinoNome""          character varying(255),
+            ""CriadoEm""             timestamp with time zone   NOT NULL,
+            CONSTRAINT ""PK_rotas"" PRIMARY KEY (""Id"")
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_rotas_VeiculoId_Data""
+            ON rotas (""VeiculoId"", ""Data"");
+
+        CREATE TABLE IF NOT EXISTS paradas_rota (
+            ""Id""           uuid                        NOT NULL,
+            ""RotaId""       uuid                        NOT NULL,
+            ""AlunoId""      uuid                        NOT NULL,
+            ""Matricula""    character varying(50)       NOT NULL,
+            ""Nome""         character varying(255)      NOT NULL,
+            ""Ordem""        integer                     NOT NULL,
+            ""Latitude""     double precision            NOT NULL,
+            ""Longitude""    double precision            NOT NULL,
+            ""ClusterId""    integer                     NOT NULL,
+            ""Confirmada""   boolean                     NOT NULL,
+            ""ConfirmadaEm"" timestamp with time zone,
+            CONSTRAINT ""PK_paradas_rota"" PRIMARY KEY (""Id""),
+            CONSTRAINT ""FK_paradas_rota_rotas_RotaId""
+                FOREIGN KEY (""RotaId"") REFERENCES rotas (""Id"") ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_paradas_rota_RotaId_AlunoId""
+            ON paradas_rota (""RotaId"", ""AlunoId"");
+
+        CREATE TABLE IF NOT EXISTS presenca_outbox (
+            ""Id""                   uuid                        NOT NULL,
+            ""AlunoId""              uuid                        NOT NULL,
+            ""CursoId""              uuid                        NOT NULL,
+            ""Role""                 character varying(50)       NOT NULL,
+            ""ProfileId""            uuid                        NOT NULL,
+            ""Status""               integer                     NOT NULL,
+            ""Tentativas""           integer                     NOT NULL,
+            ""ProximaTentativaEm""   timestamp with time zone   NOT NULL,
+            ""CriadoEm""             timestamp with time zone   NOT NULL,
+            ""EnviadoEm""            timestamp with time zone,
+            ""UltimoErro""           character varying(1000),
+            CONSTRAINT ""PK_presenca_outbox"" PRIMARY KEY (""Id"")
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_presenca_outbox_Status_ProximaTentativaEm""
+            ON presenca_outbox (""Status"", ""ProximaTentativaEm"");
+    ";
+    createCmd.ExecuteNonQuery();
+
     conn.Close();
-    db.Database.EnsureCreated();
 }
 
 app.MapControllers();
