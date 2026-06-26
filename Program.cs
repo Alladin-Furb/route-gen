@@ -47,20 +47,27 @@ builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
-// ─── Schema idempotente: detecta schema Long-based (pré-UUID) e recria ────────
+// ─── Schema idempotente: detecta schema Long-based (pré-UUID) e recria tabelas ─
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<RouteDbContext>();
     var conn = db.Database.GetDbConnection();
     conn.Open();
-    using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'presenca_outbox')";
-    var schemaUpToDate = (bool)(cmd.ExecuteScalar() ?? false);
-    conn.Close();
+    using var checkCmd = conn.CreateCommand();
+    checkCmd.CommandText = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'presenca_outbox')";
+    var schemaUpToDate = (bool)(checkCmd.ExecuteScalar() ?? false);
     if (!schemaUpToDate)
     {
-        db.Database.EnsureDeleted();
+        using var dropCmd = conn.CreateCommand();
+        dropCmd.CommandText = @"
+            DROP TABLE IF EXISTS paradas_rota CASCADE;
+            DROP TABLE IF EXISTS pontos_embarque CASCADE;
+            DROP TABLE IF EXISTS rotas CASCADE;
+            DROP TABLE IF EXISTS presenca_outbox CASCADE;
+        ";
+        dropCmd.ExecuteNonQuery();
     }
+    conn.Close();
     db.Database.EnsureCreated();
 }
 
